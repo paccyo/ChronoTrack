@@ -6,13 +6,13 @@ import { mockDeviceData, getDevicePathColors } from '@/lib/mock-data';
 import CoordinatePlaneView from './coordinate-plane-view';
 import IdFilter from './id-filter';
 import PlaybackControls from './playback-controls';
-import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
+import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarTrigger, SidebarInset, SidebarRail } from '@/components/ui/sidebar';
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, LineChart } from "lucide-react";
-import DeviceDataPointsList from './device-data-points-list'; // Added import
+import DeviceDataPointsList from './device-data-points-list';
 
 // Helper function to interpolate position
 const interpolatePosition = (p1: LocationPoint, p2: LocationPoint, currentTime: number): { lat: number; lng: number } => {
@@ -307,6 +307,7 @@ export default function ChronoTrackApp() {
             )}
           </SidebarContent>
         </Sidebar>
+        <SidebarRail />
         <SidebarInset className="flex flex-col bg-background">
           <header className="p-3 border-b bg-background flex items-center gap-2 md:hidden shadow-sm">
             <SidebarTrigger />
