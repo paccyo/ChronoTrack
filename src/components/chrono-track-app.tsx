@@ -1,9 +1,9 @@
+
 "use client";
 
 import type { DevicePath, PlaybackState, DeviceData, LocationPoint } from '@/lib/types';
 import { mockDeviceData, getDevicePathColors } from '@/lib/mock-data';
-import { APIProvider } from '@vis.gl/react-google-maps';
-import MapView from './map-view';
+import CoordinatePlaneView from './coordinate-plane-view'; // Updated import
 import IdFilter from './id-filter';
 import PlaybackControls from './playback-controls';
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
@@ -11,7 +11,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, MapPinned } from "lucide-react";
+import { AlertTriangle, LineChart } from "lucide-react"; // Changed MapPinned to LineChart
 
 // Helper function to interpolate position
 const interpolatePosition = (p1: LocationPoint, p2: LocationPoint, currentTime: number): { lat: number; lng: number } => {
@@ -20,7 +20,7 @@ const interpolatePosition = (p1: LocationPoint, p2: LocationPoint, currentTime: 
   
   if (currentTime <= t0) return { lat: p1.latitude, lng: p1.longitude };
   if (currentTime >= t1) return { lat: p2.latitude, lng: p2.longitude };
-  if (t1 === t0) return { lat: p1.latitude, lng: p1.longitude }; // Avoid division by zero
+  if (t1 === t0) return { lat: p1.latitude, lng: p1.longitude };
 
   const factor = (currentTime - t0) / (t1 - t0);
   return {
@@ -38,14 +38,14 @@ export default function ChronoTrackApp() {
   const [error, setError] = useState<string | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
 
-  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  // Removed googleMapsApiKey state and related logic
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 1000)); 
 
         if (!mockDeviceData || mockDeviceData.length === 0) {
           setError("No device data found. Please check your data source or add data to mock-data.ts.");
@@ -81,7 +81,6 @@ export default function ChronoTrackApp() {
            maxTimestamp = Date.now() / 1000;
         }
 
-
         setPlaybackState({
           isPlaying: false,
           speed: 1,
@@ -106,7 +105,6 @@ export default function ChronoTrackApp() {
       const paths = allDeviceData.map(device => ({
         ...device,
         color: colors[device.id] || '#CCCCCC',
-        // Initialize currentPlaybackPosition to the first point if available
         currentPlaybackPosition: device.points && device.points.length > 0 
           ? { lat: device.points[0].latitude, lng: device.points[0].longitude } 
           : undefined,
@@ -115,7 +113,6 @@ export default function ChronoTrackApp() {
     }
   }, [allDeviceData]);
 
-  // Playback animation loop
   useEffect(() => {
     if (!playbackState || !playbackState.isPlaying || !devicePaths.length) {
       if (animationFrameIdRef.current) {
@@ -134,12 +131,11 @@ export default function ChronoTrackApp() {
         const deltaTime = lastAnimationTimestamp ? (currentAnimationTimestamp - lastAnimationTimestamp) / 1000 : 0;
         lastAnimationTimestamp = currentAnimationTimestamp;
         
-        const scaledDeltaTime = deltaTime * prevPbState.speed * 60; // Data seconds per real second
+        const scaledDeltaTime = deltaTime * prevPbState.speed * 60;
         let newCurrentTime = prevPbState.currentTime + scaledDeltaTime;
 
         if (newCurrentTime >= prevPbState.endTime) {
           newCurrentTime = prevPbState.endTime;
-          // Stop playback at the end
           setDevicePaths(currentPaths => 
             currentPaths.map(path => {
               if (!path.points || path.points.length === 0) return path;
@@ -155,7 +151,6 @@ export default function ChronoTrackApp() {
             if (!path.points || path.points.length < 1) return path;
             if (path.points.length === 1) return {...path, currentPlaybackPosition: { lat: path.points[0].latitude, lng: path.points[0].longitude } };
 
-
             if (newCurrentTime < path.points[0].timestamp) {
               return { ...path, currentPlaybackPosition: { lat: path.points[0].latitude, lng: path.points[0].longitude }};
             }
@@ -170,7 +165,6 @@ export default function ChronoTrackApp() {
                 return { ...path, currentPlaybackPosition: interpolatePosition(p1, p2, newCurrentTime) };
               }
             }
-            // Fallback, should ideally be covered by checks above
             const lastPoint = path.points[path.points.length -1];
             return { ...path, currentPlaybackPosition: { lat: lastPoint.latitude, lng: lastPoint.longitude }};
           })
@@ -193,7 +187,7 @@ export default function ChronoTrackApp() {
   const handlePlayPause = useCallback(() => {
     setPlaybackState(prev => {
       if (!prev) return null;
-      if (prev.currentTime >= prev.endTime && !prev.isPlaying) { // If at end and paused, reset and play
+      if (prev.currentTime >= prev.endTime && !prev.isPlaying) {
         setDevicePaths(currentPaths => 
           currentPaths.map(path => ({
             ...path,
@@ -216,8 +210,7 @@ export default function ChronoTrackApp() {
         setDevicePaths(currentPaths => 
           currentPaths.map(path => {
             if (!path.points || path.points.length < 1) return path;
-             if (path.points.length === 1) return {...path, currentPlaybackPosition: { lat: path.points[0].latitude, lng: path.points[0].longitude } };
-
+            if (path.points.length === 1) return {...path, currentPlaybackPosition: { lat: path.points[0].latitude, lng: path.points[0].longitude } };
 
             if (newTime < path.points[0].timestamp) {
               return { ...path, currentPlaybackPosition: { lat: path.points[0].latitude, lng: path.points[0].longitude }};
@@ -236,7 +229,7 @@ export default function ChronoTrackApp() {
             return { ...path, currentPlaybackPosition: { lat: lastPoint.latitude, lng: lastPoint.longitude }};
           })
         );
-        return { ...prev, currentTime: newTime, isPlaying: false }; // Pause on scrub
+        return { ...prev, currentTime: newTime, isPlaying: false }; 
      });
   }, []);
 
@@ -246,27 +239,14 @@ export default function ChronoTrackApp() {
 
   const allIds = useMemo(() => allDeviceData.map(d => d.id), [allDeviceData]);
 
-  if (!googleMapsApiKey) {
-    return (
-      <div className="flex h-full items-center justify-center p-4 bg-background">
-        <Alert variant="destructive" className="max-w-md shadow-lg">
-          <AlertTriangle className="h-5 w-5" />
-          <AlertTitle>Configuration Error</AlertTitle>
-          <AlertDescription>
-            Google Maps API Key is missing. Please set <code className="font-mono bg-muted px-1 py-0.5 rounded">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in your <code className="font-mono bg-muted px-1 py-0.5 rounded">.env.local</code> file.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  // Removed Google Maps API Key check
 
   return (
-    <APIProvider apiKey={googleMapsApiKey} solutionChannel="GMP_QB_chronotrack_v1_c">
       <SidebarProvider>
         <Sidebar collapsible="icon" className="shadow-lg border-r border-sidebar-border">
           <SidebarHeader>
             <div className="flex items-center gap-3 p-3 rounded-lg">
-              <MapPinned className="h-8 w-8 text-primary" />
+              <LineChart className="h-8 w-8 text-primary" /> {/* Updated Icon */}
               <h1 className="text-2xl font-bold text-foreground group-data-[collapsible=icon]:hidden">ChronoTrack</h1>
             </div>
           </SidebarHeader>
@@ -300,7 +280,7 @@ export default function ChronoTrackApp() {
                     )}
                   </CardContent>
                 </Card>
-                {playbackState && !error && ( // Only show playback if no major data error
+                {playbackState && !error && (
                  <Card className="shadow-md">
                     <CardHeader>
                         <CardTitle className="text-lg">Playback Controls</CardTitle>
@@ -315,7 +295,7 @@ export default function ChronoTrackApp() {
                     </CardContent>
                  </Card>
                 )}
-                 {error && allIds.length > 0 && ( // Show error even if some IDs are loaded but other issues exist
+                 {error && allIds.length > 0 && ( 
                     <Alert variant="destructive" className="mt-4">
                         <AlertTriangle className="h-4 w-4"/>
                         <AlertTitle>Error</AlertTitle>
@@ -339,15 +319,14 @@ export default function ChronoTrackApp() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <p className="text-md text-foreground">Loading Map Data...</p>
+                    <p className="text-md text-foreground">Loading Path Data...</p> {/* Updated loading text */}
                 </div>
               </div>
           ) : (
-            <MapView paths={filteredPaths} playbackActive={playbackState?.isPlaying ?? false} />
+            <CoordinatePlaneView paths={filteredPaths} playbackActive={playbackState?.isPlaying ?? false} />
           )}
           </div>
         </SidebarInset>
       </SidebarProvider>
-    </APIProvider>
   );
 }
