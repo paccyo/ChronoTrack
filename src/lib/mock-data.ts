@@ -1,8 +1,12 @@
+
 import type { DeviceData } from './types';
 
-const now = Date.now() / 1000; // current time in seconds
+// const now = Date.now() / 1000; // current time in seconds
 
-export const mockDeviceData: DeviceData[] = [
+// Mock data is no longer used as the primary source. Data is fetched from Firestore.
+// This can be used as a reference for the data structure or for local testing if Firestore is unavailable.
+/*
+const mockDeviceData: DeviceData[] = [
   {
     id: 'AlphaTrack-001',
     points: [
@@ -36,13 +40,9 @@ export const mockDeviceData: DeviceData[] = [
   //   ],
   // }
 ];
+*/
 
-// Function to assign distinct colors for paths
-const pathColors = ['#FF6347', '#4682B4', '#32CD32', '#FFD700', '#6A5ACD', '#FF69B4', '#00CED1'];
-export const getDevicePathColors = (deviceIds: string[]): Record<string, string> => {
-  const colorMap: Record<string, string> = {};
-  deviceIds.forEach((id, index) => {
-    colorMap[id] = pathColors[index % pathColors.length];
-  });
-  return colorMap;
-};
+// The getDevicePathColors function and pathColors array have been moved to src/components/chrono-track-app.tsx
+// as they are closely tied to the presentation logic there and mockDeviceData is no longer the primary data source.
+
+    

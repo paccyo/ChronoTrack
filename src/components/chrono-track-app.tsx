@@ -2,7 +2,7 @@
 "use client";
 
 import type { DevicePath, PlaybackState, DeviceData, LocationPoint } from '@/lib/types';
-import { mockDeviceData, getDevicePathColors } from '@/lib/mock-data';
+// import { mockDeviceData, getDevicePathColors } from '@/lib/mock-data'; // No longer using mock data
 import CoordinatePlaneView from './coordinate-plane-view';
 import IdFilter from './id-filter';
 import PlaybackControls from './playback-controls';
@@ -13,6 +13,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, LineChart } from "lucide-react";
 import DeviceDataPointsList from './device-data-points-list';
+
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query, orderBy, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
 
 // Helper function to interpolate position
 const interpolatePosition = (p1: LocationPoint, p2: LocationPoint, currentTime: number): { lat: number; lng: number } => {
@@ -30,6 +33,17 @@ const interpolatePosition = (p1: LocationPoint, p2: LocationPoint, currentTime: 
   };
 };
 
+// Moved getDevicePathColors here
+const pathColors = ['#FF6347', '#4682B4', '#32CD32', '#FFD700', '#6A5ACD', '#FF69B4', '#00CED1'];
+const getDevicePathColors = (deviceIds: string[]): Record<string, string> => {
+  const colorMap: Record<string, string> = {};
+  deviceIds.forEach((id, index) => {
+    colorMap[id] = pathColors[index % pathColors.length];
+  });
+  return colorMap;
+};
+
+
 export default function ChronoTrackApp() {
   const [allDeviceData, setAllDeviceData] = useState<DeviceData[]>([]);
   const [devicePaths, setDevicePaths] = useState<DevicePath[]>([]);
@@ -44,23 +58,80 @@ export default function ChronoTrackApp() {
       setIsLoading(true);
       setError(null);
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000)); 
-
-        if (!mockDeviceData || mockDeviceData.length === 0) {
-          setError("No device data found. Please check your data source or add data to mock-data.ts.");
+        if (!db) {
+          setError("Firestore is not initialized. Please check your Firebase configuration.");
           setAllDeviceData([]);
+          setPlaybackState(null);
           setIsLoading(false);
           return;
         }
         
-        setAllDeviceData(mockDeviceData);
-        const allIds = mockDeviceData.map(d => d.id);
+        const devicesCollectionRef = collection(db, 'devices');
+        const deviceQuerySnapshot = await getDocs(devicesCollectionRef);
+
+        if (deviceQuerySnapshot.empty) {
+          setError("No devices found in Firestore. Please add device data. Structure: /devices/{deviceId} with a subcollection 'points' containing documents with 'timestamp' (Timestamp), 'latitude' (number), 'longitude' (number).");
+          setAllDeviceData([]);
+          setPlaybackState({
+            isPlaying: false,
+            speed: 1,
+            currentTime: Math.floor(Date.now() / 1000),
+            startTime: Math.floor(Date.now() / 1000),
+            endTime: Math.floor(Date.now() / 1000),
+          });
+          setIsLoading(false);
+          return;
+        }
+
+        const fetchedDeviceData: DeviceData[] = [];
+        for (const deviceDoc of deviceQuerySnapshot.docs) {
+          const deviceId = deviceDoc.id;
+          const pointsCollectionRef = collection(db, `devices/${deviceId}/points`);
+          const pointsQuery = query(pointsCollectionRef, orderBy('timestamp', 'asc')); 
+          const pointsQuerySnapshot = await getDocs(pointsQuery);
+
+          const points: LocationPoint[] = pointsQuerySnapshot.docs.map(pointDoc => {
+            const data = pointDoc.data();
+            const firestoreTimestamp = data.timestamp as FirestoreTimestamp; 
+            return {
+              timestamp: firestoreTimestamp.seconds, 
+              latitude: data.latitude as number,
+              longitude: data.longitude as number,
+            };
+          });
+          
+          if (points.length > 0) {
+             fetchedDeviceData.push({
+                id: deviceId,
+                points: points,
+              });
+          } else {
+            console.warn(`Device ${deviceId} found in Firestore but has no location points in its 'points' subcollection.`);
+          }
+        }
+        
+        if (fetchedDeviceData.length === 0) {
+          setError("Found devices in Firestore, but none have location data points. Ensure 'points' subcollections are populated with valid data.");
+          setAllDeviceData([]);
+           setPlaybackState({
+            isPlaying: false,
+            speed: 1,
+            currentTime: Math.floor(Date.now() / 1000),
+            startTime: Math.floor(Date.now() / 1000),
+            endTime: Math.floor(Date.now() / 1000),
+          });
+          setIsLoading(false);
+          return;
+        }
+        
+        setAllDeviceData(fetchedDeviceData);
+        const allIds = fetchedDeviceData.map(d => d.id);
         setSelectedDeviceIds(allIds); 
 
         let minTimestamp = Infinity;
         let maxTimestamp = -Infinity;
         let hasPoints = false;
-        mockDeviceData.forEach(device => {
+        fetchedDeviceData.forEach(device => {
           if (device.points && device.points.length > 0) {
             hasPoints = true;
             device.points.forEach(point => {
@@ -71,13 +142,13 @@ export default function ChronoTrackApp() {
         });
         
         if (!hasPoints) {
-          setError("Data loaded, but no location points found to display.");
-          minTimestamp = Date.now() / 1000;
-          maxTimestamp = Date.now() / 1000;
+          setError("Firestore data loaded, but no usable location points found to display.");
+          minTimestamp = Math.floor(Date.now() / 1000);
+          maxTimestamp = Math.floor(Date.now() / 1000);
         } else if (minTimestamp === Infinity || maxTimestamp === -Infinity) {
-           setError("Invalid timestamp data found.");
-           minTimestamp = Date.now() / 1000;
-           maxTimestamp = Date.now() / 1000;
+           setError("Invalid timestamp data encountered in Firestore records.");
+           minTimestamp = Math.floor(Date.now() / 1000);
+           maxTimestamp = Math.floor(Date.now() / 1000);
         }
 
         setPlaybackState({
@@ -87,9 +158,11 @@ export default function ChronoTrackApp() {
           startTime: minTimestamp,
           endTime: maxTimestamp,
         });
-      } catch (e) {
-        console.error("Failed to fetch data:", e);
-        setError("Failed to load device data. Please try again later.");
+      } catch (e: any) {
+        console.error("Failed to fetch data from Firestore:", e);
+        setError(`Failed to load device data from Firestore: ${e.message || 'Unknown error'}. Check console and Firestore rules.`);
+        setAllDeviceData([]);
+        setPlaybackState(null);
       } finally {
         setIsLoading(false);
       }
@@ -109,6 +182,8 @@ export default function ChronoTrackApp() {
           : undefined,
       }));
       setDevicePaths(paths);
+    } else {
+      setDevicePaths([]); // Clear paths if no device data
     }
   }, [allDeviceData]);
 
@@ -164,6 +239,7 @@ export default function ChronoTrackApp() {
                 return { ...path, currentPlaybackPosition: interpolatePosition(p1, p2, newCurrentTime) };
               }
             }
+            // Fallback if no segment found (should ideally not happen if logic is correct and newCurrentTime is within bounds)
             const lastPoint = path.points[path.points.length -1];
             return { ...path, currentPlaybackPosition: { lat: lastPoint.latitude, lng: lastPoint.longitude }};
           })
@@ -180,7 +256,7 @@ export default function ChronoTrackApp() {
         animationFrameIdRef.current = null;
       }
     };
-  }, [playbackState?.isPlaying, playbackState?.speed, playbackState?.currentTime, playbackState?.endTime, devicePaths]);
+  }, [playbackState?.isPlaying, playbackState?.speed, playbackState?.currentTime, playbackState?.endTime, devicePaths]); // devicePaths dependency is important here
 
 
   const handlePlayPause = useCallback(() => {
@@ -224,6 +300,7 @@ export default function ChronoTrackApp() {
                 return { ...path, currentPlaybackPosition: interpolatePosition(p1, p2, newTime) };
               }
             }
+             // Fallback if no segment found
             const lastPoint = path.points[path.points.length -1];
             return { ...path, currentPlaybackPosition: { lat: lastPoint.latitude, lng: lastPoint.longitude }};
           })
@@ -263,7 +340,7 @@ export default function ChronoTrackApp() {
                     <CardTitle className="text-lg">Device IDs</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {error && !allIds.length ? (
+                    {error && !allIds.length ? ( // Show error related to loading if no IDs are present
                        <Alert variant="default" className="bg-card">
                         <AlertTriangle className="h-4 w-4"/>
                         <AlertTitle>Notice</AlertTitle>
@@ -278,7 +355,7 @@ export default function ChronoTrackApp() {
                     )}
                   </CardContent>
                 </Card>
-                {playbackState && !error && (
+                {playbackState && !error && ( // Only show playback if state is valid and no initial load error blocked it
                  <Card className="shadow-md">
                     <CardHeader>
                         <CardTitle className="text-lg">Playback Controls</CardTitle>
@@ -293,15 +370,15 @@ export default function ChronoTrackApp() {
                     </CardContent>
                  </Card>
                 )}
-                {playbackState && filteredPaths.length > 0 && !error && (
-                  <DeviceDataPointsList paths={filteredPaths} playbackCurrentTime={playbackState.currentTime} />
-                )}
-                 {error && allIds.length > 0 && ( 
+                 {error && allIds.length > 0 && ( // Show error specifically if data loading failed but IDs might have been populated before
                     <Alert variant="destructive" className="mt-4">
                         <AlertTriangle className="h-4 w-4"/>
                         <AlertTitle>Error</AlertTitle>
                         <AlertDescription>{error}</AlertDescription>
                     </Alert>
+                )}
+                {playbackState && filteredPaths.length > 0 && ( // Ensure playbackState is not null
+                  <DeviceDataPointsList paths={filteredPaths} playbackCurrentTime={playbackState.currentTime} />
                 )}
               </>
             )}
@@ -321,9 +398,17 @@ export default function ChronoTrackApp() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <p className="text-md text-foreground">Loading Path Data...</p>
+                    <p className="text-md text-foreground">Loading Path Data from Firestore...</p>
                 </div>
               </div>
+          ) : error && filteredPaths.length === 0 ? ( // If error and no paths, show error in main view too
+            <div className="w-full h-full flex items-center justify-center bg-muted rounded-md shadow-inner">
+                <Alert variant="destructive" className="max-w-md">
+                    <AlertTriangle className="h-4 w-4"/>
+                    <AlertTitle>Data Loading Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            </div>
           ) : (
             <CoordinatePlaneView paths={filteredPaths} playbackActive={playbackState?.isPlaying ?? false} />
           )}
@@ -332,3 +417,5 @@ export default function ChronoTrackApp() {
       </SidebarProvider>
   );
 }
+
+    
