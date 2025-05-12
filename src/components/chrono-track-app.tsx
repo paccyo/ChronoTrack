@@ -3,7 +3,7 @@
 
 import type { DevicePath, PlaybackState, DeviceData, LocationPoint } from '@/lib/types';
 import { mockDeviceData, getDevicePathColors } from '@/lib/mock-data';
-import CoordinatePlaneView from './coordinate-plane-view'; // Updated import
+import CoordinatePlaneView from './coordinate-plane-view';
 import IdFilter from './id-filter';
 import PlaybackControls from './playback-controls';
 import { Sidebar, SidebarProvider, SidebarContent, SidebarHeader, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar';
@@ -11,7 +11,8 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, LineChart } from "lucide-react"; // Changed MapPinned to LineChart
+import { AlertTriangle, LineChart } from "lucide-react";
+import DeviceDataPointsList from './device-data-points-list'; // Added import
 
 // Helper function to interpolate position
 const interpolatePosition = (p1: LocationPoint, p2: LocationPoint, currentTime: number): { lat: number; lng: number } => {
@@ -37,8 +38,6 @@ export default function ChronoTrackApp() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
-
-  // Removed googleMapsApiKey state and related logic
 
   useEffect(() => {
     const fetchData = async () => {
@@ -239,14 +238,12 @@ export default function ChronoTrackApp() {
 
   const allIds = useMemo(() => allDeviceData.map(d => d.id), [allDeviceData]);
 
-  // Removed Google Maps API Key check
-
   return (
       <SidebarProvider>
         <Sidebar collapsible="icon" className="shadow-lg border-r border-sidebar-border">
           <SidebarHeader>
             <div className="flex items-center gap-3 p-3 rounded-lg">
-              <LineChart className="h-8 w-8 text-primary" /> {/* Updated Icon */}
+              <LineChart className="h-8 w-8 text-primary" />
               <h1 className="text-2xl font-bold text-foreground group-data-[collapsible=icon]:hidden">ChronoTrack</h1>
             </div>
           </SidebarHeader>
@@ -257,6 +254,7 @@ export default function ChronoTrackApp() {
                 <Skeleton className="h-24 w-full mb-4" />
                 <Skeleton className="h-10 w-full mb-2" />
                 <Skeleton className="h-36 w-full" />
+                <Skeleton className="h-48 w-full mt-4" /> 
               </>
             ) : (
               <>
@@ -295,6 +293,9 @@ export default function ChronoTrackApp() {
                     </CardContent>
                  </Card>
                 )}
+                {playbackState && filteredPaths.length > 0 && !error && (
+                  <DeviceDataPointsList paths={filteredPaths} playbackCurrentTime={playbackState.currentTime} />
+                )}
                  {error && allIds.length > 0 && ( 
                     <Alert variant="destructive" className="mt-4">
                         <AlertTriangle className="h-4 w-4"/>
@@ -319,7 +320,7 @@ export default function ChronoTrackApp() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <p className="text-md text-foreground">Loading Path Data...</p> {/* Updated loading text */}
+                    <p className="text-md text-foreground">Loading Path Data...</p>
                 </div>
               </div>
           ) : (
